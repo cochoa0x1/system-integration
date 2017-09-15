@@ -55,6 +55,8 @@ class Bridge(object):
         self.publishers = {e.name: rospy.Publisher(e.topic, TYPE[e.type], queue_size=1)
                            for e in conf.publishers}
 
+        self.server = None
+
     def register_server(self, server):
         self.server = server
 
@@ -187,6 +189,7 @@ class Bridge(object):
 
     def callback_throttle(self, data):
         self.server('throttle', data={'throttle': str(data.pedal_cmd)})
+        #rospy.logerr('sending throttle command: %s'%str(data.pedal_cmd))
 
     def callback_brake(self, data):
         self.server('brake', data={'brake': str(data.pedal_cmd)})

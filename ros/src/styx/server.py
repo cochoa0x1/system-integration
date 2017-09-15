@@ -1,24 +1,43 @@
 #!/usr/bin/env python
 
+import sys
+sys.excepthook = lambda *args: None
+
 import socketio
 import eventlet
 import eventlet.wsgi
+
+
 import time
 from flask import Flask, render_template
 
 from bridge import Bridge
 from conf import conf
 
-sio = socketio.Server()
+#import eventlet
+
+
+eventlet.monkey_patch()
+
+
+
+sio = socketio.Server(async_mode='eventlet')
 app = Flask(__name__)
 bridge = Bridge(conf)
 msgs = []
 
+
 dbw_enable = False
+
+import rospy
+import json
+
 
 @sio.on('connect')
 def connect(sid, environ):
     print("connect ", sid)
+    rospy.logerr('connected! %s'%str(sid))
+
 
 def send(topic, data):
     s = 1
@@ -26,6 +45,9 @@ def send(topic, data):
     #sio.emit(topic, data=json.dumps(data), skip_sid=True)
 
 bridge.register_server(send)
+
+
+
 
 @sio.on('telemetry')
 def telemetry(sid, data):
@@ -37,6 +59,7 @@ def telemetry(sid, data):
     for i in range(len(msgs)):
         topic, data = msgs.pop(0)
         sio.emit(topic, data=data, skip_sid=True)
+        #rospy.logerr('emit! %s'%json.dumps(data))
 
 @sio.on('control')
 def control(sid, data):
@@ -64,4 +87,5 @@ if __name__ == '__main__':
     app = socketio.Middleware(sio, app)
 
     # deploy as an eventlet WSGI server
+
     eventlet.wsgi.server(eventlet.listen(('', 4567)), app)

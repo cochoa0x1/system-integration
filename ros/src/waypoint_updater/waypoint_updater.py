@@ -1,10 +1,13 @@
 #!/usr/bin/env python
 
+from __future__ import print_function
+
 import rospy
 from geometry_msgs.msg import PoseStamped
 from styx_msgs.msg import Lane, Waypoint
 
 import math
+import numpy as np
 
 '''
 This node will publish waypoints from the car's current position to some `x` distance ahead.
@@ -32,21 +35,44 @@ class WaypointUpdater(object):
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
         # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
+        #rospy.Subscriber("/traffic_waypoint", Waypoint, self.traffic_cb)
+        #rospy.Subscriber("/obstacle_waypoint", Waypoint, self.obstacle_cb)
 
 
         self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
         # TODO: Add other member variables you need below
-
+        self.pose = PoseStamped()
         rospy.spin()
 
     def pose_cb(self, msg):
-        # TODO: Implement
-        pass
+        self.pose = msg
+        #rospy.logerr(self.pose)
+        #rospy.logerr('position: %f, %f'%(self.pose.pose.position.x, self.pose.pose.position.y))
 
     def waypoints_cb(self, waypoints):
-        # TODO: Implement
-        pass
+        self.waypoints = waypoints
+        #print(waypoints)
+
+        #get the nearest waypoint
+        d = lambda a, b: np.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
+        
+        pos = self.pose.pose.position
+        distances =[ d(pos,w.pose.pose.position) for w in waypoints.waypoints]
+
+        i = np.argmin(distances)
+        x =waypoints.waypoints[i].pose.pose.position.x
+        y =waypoints.waypoints[i].pose.pose.position.y
+        #y =w.twist.twist.linear.y
+        rospy.logerr('clossest waypoint: %i: %f, %f, distance: %f'%( i,x,y, distances[i] ))
+
+        #publish the waypoints from i to i+LOOKAHEAD_WPS
+        publish_result = Lane()
+        publish_result.waypoints = waypoints.waypoints[i:i+LOOKAHEAD_WPS]
+        self.final_waypoints_pub.publish(publish_result)
+
+
+
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
