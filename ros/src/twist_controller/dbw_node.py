@@ -6,10 +6,14 @@ sys.excepthook = lambda *args: None
 
 import rospy
 from std_msgs.msg import Bool
+from styx_msgs.msg import Lane, Waypoint
+
 from dbw_mkz_msgs.msg import ThrottleCmd, SteeringCmd, BrakeCmd, SteeringReport
 from geometry_msgs.msg import TwistStamped
-import math
 
+from geometry_msgs.msg import PoseStamped
+import math
+import numpy as np
 from twist_controller import Controller
 
 '''
@@ -61,12 +65,36 @@ class DBWNode(object):
         # self.controller = TwistController(<Arguments you wish to provide>)
 
         # TODO: Subscribe to all the topics you need to
+        rospy.Subscriber('/final_waypoints', Lane, self.waypoints_cb)
+        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
+
+        self.pose = None
+        self.waypoints = None
 
         self.loop()
 
+    def pose_cb(self, msg):
+        self.pose = msg
+
+    def waypoints_cb(self, waypoints):
+        self.waypoints = waypoints
+
     def loop(self):
-        #rate = rospy.Rate(50) # 50Hz
-        rate = rospy.Rate(10) # 10Hz
+
+         #rate = rospy.Rate(50) # 50Hz
+        rate = rospy.Rate(1) # 10Hz
+
+        def calc_angle(w, car_heading, pos):
+            b = np.array([w.pose.pose.position.x - pos.x, w.pose.pose.position.y - pos.y])
+            
+            if np.linalg.norm(b) == 0:
+                return 0.0
+
+            b /= np.linalg.norm(b)
+
+            return np.arccos(np.dot(car_heading,b))
+
+       
         while not rospy.is_shutdown():
             # TODO: Get predicted throttle, brake, and steering using `twist_controller`
             # You should only publish the control commands if dbw is enabled
@@ -77,7 +105,29 @@ class DBWNode(object):
             #                                                     <any other argument you need>)
             # if <dbw is enabled>:
             #   self.publish(throttle, brake, steer)
-            self.publish(1.0,0.0,0.0)
+
+            #turn toward the waypoint
+            if self.pose is None or self.waypoints is None:
+                rate.sleep()
+                continue
+            elif len(self.waypoints.waypoints) <=1:
+                rate.sleep()
+                continue
+
+            pos = self.pose.pose.position
+            car_theta = self.pose.pose.orientation.z
+            car_heading = np.array([np.cos(car_theta),np.sin(car_theta)])
+
+            w = self.waypoints.waypoints[0]
+
+            #rospy.logerr(w)
+            theta = calc_angle(w, car_heading, pos) 
+
+            #angle = 45*np.pi/180.0
+            rospy.logerr('x: %f y: %f theta: %f'%(w.pose.pose.position.x,w.pose.pose.position.y,theta))
+
+            self.publish(0.4,0.0,-1.0*theta)
+
             rate.sleep()
 
     def publish(self, throttle, brake, steer):
