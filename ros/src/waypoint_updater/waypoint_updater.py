@@ -24,7 +24,8 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 1 # Number of waypoints we will publish. You can change this number
+LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
+TARGET_SPEED = 20*.447
 
 
 class WaypointUpdater(object):
@@ -39,7 +40,7 @@ class WaypointUpdater(object):
         #rospy.Subscriber("/obstacle_waypoint", Waypoint, self.obstacle_cb)
 
 
-        self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
+        self.final_waypoints_pub = rospy.Publisher('/final_waypoints', Lane, queue_size=1)
 
         # TODO: Add other member variables you need below
         self.pose = PoseStamped()
@@ -49,12 +50,12 @@ class WaypointUpdater(object):
     def pose_cb(self, msg):
         self.pose = msg
 
-        publish_result = Lane()
-        publish_result.waypoints = self.get_next_waypoints()
-        self.final_waypoints_pub.publish(publish_result)
-        #rospy.logerr(self.pose)
-        #rospy.logerr('position: %f, %f'%(self.pose.pose.position.x, self.pose.pose.position.y))
+        rospy.logerr('position: %f, %f'%(self.pose.pose.position.x, self.pose.pose.position.y))
 
+        self.update_waypoints()
+       
+        #rospy.logerr(self.pose)
+        
     def waypoints_cb(self, waypoints):
         self.waypoints = waypoints
         #print(waypoints)
@@ -70,13 +71,37 @@ class WaypointUpdater(object):
         # y =waypoints.waypoints[i].pose.pose.position.y
         # #y =w.twist.twist.linear.y
         
-
         # #publish the waypoints from i to i+LOOKAHEAD_WPS
 
+    def update_waypoints(self):
 
-        publish_result = Lane()
-        publish_result.waypoints = self.get_next_waypoints()
-        self.final_waypoints_pub.publish(publish_result)
+        i = self.get_nearest_waypoint()
+        new_wapoints = Lane()
+        new_wapoints.waypoints = self.waypoints.waypoints[i:i+LOOKAHEAD_WPS]
+        self.final_waypoints_pub.publish(new_wapoints)
+
+
+    def get_nearest_waypoint(self):
+        '''returns the nearest waypoint index'''
+
+        #TODO, should probably return the nearest waypoint faces in the car's direction
+
+        min_dist = 1e12
+        min_index = 0
+
+        pos = self.pose.pose.position
+
+        d = lambda a, b: np.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
+
+        for i, w in enumerate(self.waypoints.waypoints):
+
+            dist = d(pos,w.pose.pose.position)
+            
+            if dist < min_dist:
+                min_dist = dist
+                min_index = i
+
+        return min_index
 
 
     def get_next_waypoints(self):
@@ -117,8 +142,8 @@ class WaypointUpdater(object):
                 min_index = i
                 min_angle = theta
 
-        rospy.logerr('clossest waypoint: %i, distance: %f min angle %f'%( min_index, min_dist, min_angle ))
-        return self.waypoints.waypoints[min_index:min_index+LOOKAHEAD_WPS]
+        rospy.loginfo('clossest waypoint: %i, distance: %f min angle %f'%( min_index, min_dist, min_angle ))
+        return self.waypoints.waypoints#[min_index:min_index+2]
 
 
 
