@@ -11,6 +11,8 @@ import tf
 import cv2
 import yaml
 
+import traceback
+
 STATE_COUNT_THRESHOLD = 3
 
 class TLDetector(object):
@@ -49,16 +51,39 @@ class TLDetector(object):
         self.last_wp = -1
         self.state_count = 0
 
-        rospy.spin()
+        self.loop()
+
+    def loop(self):
+        rate = rospy.Rate(10)
+
+
+        #for now get the nearest waypoint that is in front of the car
+        #need pose, lights, and waypoints here
+
+        #publish its index to /traffic_waypoints
+
+        while not rospy.is_shutdown():
+            # if self.pose is None or self.lights is None or self.waypoints is None:
+            #     rospy.logerr('lights not setup')
+            #     rate.sleep()
+            #     continue
+
+            #just publish 300
+            #self.upcoming_red_light_pub.publish(Int32(300))
+
+            rate.sleep()
 
     def pose_cb(self, msg):
         self.pose = msg
+        #rospy.logerr('got pose!')
 
     def waypoints_cb(self, waypoints):
         self.waypoints = waypoints
+        rospy.logerr('got wp!')
 
     def traffic_cb(self, msg):
         self.lights = msg.lights
+        #rospy.logerr('got lights!')
 
     def image_cb(self, msg):
         """Identifies red lights in the incoming camera image and publishes the index
@@ -70,7 +95,8 @@ class TLDetector(object):
         """
         self.has_image = True
         self.camera_image = msg
-        light_wp, state = self.process_traffic_lights()
+        #light_wp, state = self.process_traffic_lights()
+        light_wp,state = 300, TrafficLight.RED
 
         '''
         Publish upcoming red lights at camera frequency.
@@ -151,3 +177,4 @@ if __name__ == '__main__':
         TLDetector()
     except rospy.ROSInterruptException:
         rospy.logerr('Could not start traffic node.')
+        rospy.logerr(traceback.format_exc())

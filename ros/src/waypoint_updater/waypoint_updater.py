@@ -5,6 +5,7 @@ import traceback
 import rospy
 from geometry_msgs.msg import PoseStamped
 from styx_msgs.msg import Lane, Waypoint
+from std_msgs.msg import Int32
 
 import math
 import numpy as np
@@ -33,6 +34,7 @@ class WaypointUpdater(object):
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
         rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
 
         # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
 
@@ -42,10 +44,14 @@ class WaypointUpdater(object):
         # TODO: Add other member variables you need below
         self.pose = PoseStamped()
         self.waypoints = Lane()
+
+        #car's position and orientation
         self.x = None
         self.y = None
         self.z = None
         self.theta = None
+
+        self.light_i = None
 
         self.loop()
 
@@ -63,7 +69,23 @@ class WaypointUpdater(object):
 
             i = self.get_nearest_waypoint()
             new_wapoints = Lane()
-            new_wapoints.waypoints = self.waypoints.waypoints[i:i+LOOKAHEAD_WPS]
+
+
+            cutoff = i+LOOKAHEAD_WPS
+
+            TARGET_VEL = 10*.4457
+
+            if self.light_i >0 and i > self.light_i:
+                rospy.logerr('APPROACHING RED LIGHT STOPPPPPPPP')
+                TARGET_VEL = 0
+                #cutoff = self.light_i - i
+            
+            new_wapoints.waypoints = self.waypoints.waypoints[i:cutoff]
+
+            #set the speed for these waypoints
+            for w in new_wapoints.waypoints:
+                w.twist.twist.linear.x = TARGET_VEL
+
             self.final_waypoints_pub.publish(new_wapoints)
 
             rate.sleep()
@@ -112,7 +134,8 @@ class WaypointUpdater(object):
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
-        pass
+        self.light_i = msg.data
+        rospy.logerr(self.light_i)
 
     def obstacle_cb(self, msg):
         # TODO: Callback for /obstacle_waypoint message. We will implement it later

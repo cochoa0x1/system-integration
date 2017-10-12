@@ -83,8 +83,15 @@ class DBWNode(object):
         while not rospy.is_shutdown():
             throttle, brake, steering = self.controller.control()
 
+
             if self.twist is not None and self.current_velocity is not None:
                 #rospy.logerr('target velocity: %f'%(self.twist.linear.x))
+                rospy.logerr('target vel %f'%self.twist.linear.x)
+                if self.twist.linear.x > self.current_velocity.linear.x:
+                    throttle = 1.0
+                else:
+                    throttle = 0.0
+                    brake = 1000
                 steering = self.yaw_controller.get_steering(self.twist.linear.x, self.twist.angular.z, self.current_velocity.linear.x)
 
             #rospy.logerr('%f,%f,%f'%(throttle, brake, steering))
