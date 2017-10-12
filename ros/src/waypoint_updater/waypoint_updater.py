@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import print_function
+import traceback
 
 from __future__ import print_function
 
@@ -8,7 +10,7 @@ from styx_msgs.msg import Lane, Waypoint
 
 import math
 import numpy as np
-
+import tf
 '''
 This node will publish waypoints from the car's current position to some `x` distance ahead.
 
@@ -24,8 +26,7 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 200 # Number of waypoints we will publish. You can change this number
-TARGET_SPEED = 20*.447
+LOOKAHEAD_WPS = 50 # Number of waypoints we will publish. You can change this number
 
 
 class WaypointUpdater(object):
@@ -45,10 +46,44 @@ class WaypointUpdater(object):
         # TODO: Add other member variables you need below
         self.pose = PoseStamped()
         self.waypoints = Lane()
-        rospy.spin()
+        self.x = None
+        self.y = None
+        self.z = None
+        self.theta = None
+
+        self.loop()
+
+    def loop(self):
+        rate = rospy.Rate(50)
+
+        while not rospy.is_shutdown():
+
+            if self.x is None or self.waypoints.waypoints is None:
+                rospy.logerr('waiting for init')
+                rate.sleep()
+                continue
+
+            rospy.logerr('position: %f, %f, %f'%(self.x, self.y, self.theta))
+
+            i = self.get_nearest_waypoint()
+            new_wapoints = Lane()
+            new_wapoints.waypoints = self.waypoints.waypoints[i:i+LOOKAHEAD_WPS]
+            self.final_waypoints_pub.publish(new_wapoints)
+
+            rate.sleep()
 
     def pose_cb(self, msg):
         self.pose = msg
+        self.x = msg.pose.position.x
+        self.y = msg.pose.position.y
+        self.z = msg.pose.position.z
+
+        euler = tf.transformations.euler_from_quaternion([
+            msg.pose.orientation.x,
+            msg.pose.orientation.y,
+            msg.pose.orientation.z,
+            msg.pose.orientation.w])
+        self.theta = euler[2]
 
         rospy.logerr('position: %f, %f'%(self.pose.pose.position.x, self.pose.pose.position.y))
 
@@ -58,97 +93,32 @@ class WaypointUpdater(object):
         
     def waypoints_cb(self, waypoints):
         self.waypoints = waypoints
-        #print(waypoints)
-
-        #get the nearest waypoint
-        # d = lambda a, b: np.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
-        
-        # pos = self.pose.pose.position
-        # distances =[ d(pos,w.pose.pose.position) for w in waypoints.waypoints]
-
-        # i = np.argmin(distances)
-        # x =waypoints.waypoints[i].pose.pose.position.x
-        # y =waypoints.waypoints[i].pose.pose.position.y
-        # #y =w.twist.twist.linear.y
-        
-        # #publish the waypoints from i to i+LOOKAHEAD_WPS
-
-    def update_waypoints(self):
-
-        i = self.get_nearest_waypoint()
-        new_wapoints = Lane()
-        new_wapoints.waypoints = self.waypoints.waypoints[i:i+LOOKAHEAD_WPS]
-        self.final_waypoints_pub.publish(new_wapoints)
-
 
     def get_nearest_waypoint(self):
         '''returns the nearest waypoint index'''
 
-        #TODO, should probably return the nearest waypoint faces in the car's direction
-
-        min_dist = 1e12
-        min_index = 0
-
-        pos = self.pose.pose.position
-
-        d = lambda a, b: np.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
-
-        for i, w in enumerate(self.waypoints.waypoints):
-
-            dist = d(pos,w.pose.pose.position)
-            
-            if dist < min_dist:
-                min_dist = dist
-                min_index = i
-
-        return min_index
-
-
-    def get_next_waypoints(self):
-        '''returns the next waypoint the car should drive to,
-            this is defined as the closest waypoint that is in the direction the car is facing
-
-            how can we tell if the point is in front of the car?
-            consturct two vectors: car_heading that points in the direction of the car
-            and wd which is the vector with origin at carx,y, calculate the angle between them
-        '''
-        pos = self.pose.pose.position
-
-        car_theta = self.pose.pose.orientation.z
+        d = lambda b: np.sqrt((self.x-b.x)**2 + (self.y-b.y)**2  + (self.z-b.z)**2)
         
-        car_heading = np.array([np.cos(car_theta),np.sin(car_theta)])
-
-        def calc_angle(w):
-            b = np.array([w.pose.pose.position.x - pos.x, w.pose.pose.position.y - pos.y])
-            b /= np.linalg.norm(b)
-
-            return np.arccos(np.dot(car_heading,b))
-
-        #get the nearest waypoint
-        d = lambda a, b: np.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
-        
-        #filter down the distances to relvant angles
         min_dist = 1e12
         min_index = 0
         min_angle = 0
+
         for i, w in enumerate(self.waypoints.waypoints):
 
-            dist = d(pos,w.pose.pose.position)
-            theta = calc_angle(w)
+            pos = w.pose.pose.position
+            dist = d(pos)
 
+            heading = np.arctan2( self.y-pos.y, self.x - pos.x)
 
-            if np.abs(theta) <= np.pi/2 and dist < min_dist:
+            theta = np.abs(heading - self.theta)
+            
+            if dist < min_dist and theta <= np.pi/4:
                 min_dist = dist
                 min_index = i
                 min_angle = theta
 
-        rospy.loginfo('clossest waypoint: %i, distance: %f min angle %f'%( min_index, min_dist, min_angle ))
-        return self.waypoints.waypoints#[min_index:min_index+2]
-
-
-
-
-
+        rospy.logerr('wp: %i, distance %f car_theta %f angle %f'%(min_index,min_dist,self.theta, min_angle))
+        return min_index
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
@@ -178,3 +148,4 @@ if __name__ == '__main__':
         WaypointUpdater()
     except rospy.ROSInterruptException:
         rospy.logerr('Could not start waypoint updater node.')
+        rospy.logerr(traceback.format_exc())

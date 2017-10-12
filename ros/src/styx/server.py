@@ -23,7 +23,6 @@ eventlet.monkey_patch()
 
 sio = socketio.Server(async_mode='eventlet')
 app = Flask(__name__)
-bridge = Bridge(conf)
 msgs = []
 
 
@@ -44,7 +43,7 @@ def send(topic, data):
     msgs.append((topic, data))
     #sio.emit(topic, data=json.dumps(data), skip_sid=True)
 
-bridge.register_server(send)
+bridge = Bridge(conf, send)
 
 
 

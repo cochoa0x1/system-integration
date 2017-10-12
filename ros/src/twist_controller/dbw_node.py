@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import print_function
+import traceback
 
 import sys
 sys.excepthook = lambda *args: None
@@ -7,14 +9,16 @@ sys.excepthook = lambda *args: None
 import rospy
 from std_msgs.msg import Bool
 from styx_msgs.msg import Lane, Waypoint
-
 from dbw_mkz_msgs.msg import ThrottleCmd, SteeringCmd, BrakeCmd, SteeringReport
-from geometry_msgs.msg import TwistStamped
+from geometry_msgs.msg import TwistStamped, PoseStamped
+import math
 
 from geometry_msgs.msg import PoseStamped
 import math
 import numpy as np
 from twist_controller import Controller
+from yaw_controller import YawController
+
 
 import traceback
 from yaw_controller import YawController
@@ -43,112 +47,96 @@ that we have created in the `__init__` function.
 '''
 
 class DBWNode(object):
-	def __init__(self):
-		rospy.init_node('dbw_node')
+    def __init__(self):
+        rospy.init_node('dbw_node')
 
-		vehicle_mass = rospy.get_param('~vehicle_mass', 1736.35)
-		fuel_capacity = rospy.get_param('~fuel_capacity', 13.5)
-		brake_deadband = rospy.get_param('~brake_deadband', .1)
-		decel_limit = rospy.get_param('~decel_limit', -5)
-		accel_limit = rospy.get_param('~accel_limit', 1.)
-		wheel_radius = rospy.get_param('~wheel_radius', 0.2413)
-		wheel_base = rospy.get_param('~wheel_base', 2.8498)
-		steer_ratio = rospy.get_param('~steer_ratio', 14.8)
-		max_lat_accel = rospy.get_param('~max_lat_accel', 3.)
-		max_steer_angle = rospy.get_param('~max_steer_angle', 8.)
-		min_speed = 0.5
+        vehicle_mass = rospy.get_param('~vehicle_mass', 1736.35)
+        fuel_capacity = rospy.get_param('~fuel_capacity', 13.5)
+        brake_deadband = rospy.get_param('~brake_deadband', .1)
+        decel_limit = rospy.get_param('~decel_limit', -5)
+        accel_limit = rospy.get_param('~accel_limit', 1.)
+        wheel_radius = rospy.get_param('~wheel_radius', 0.2413)
+        wheel_base = rospy.get_param('~wheel_base', 2.8498)
+        steer_ratio = rospy.get_param('~steer_ratio', 14.8)
+        max_lat_accel = rospy.get_param('~max_lat_accel', 3.)
+        max_steer_angle = rospy.get_param('~max_steer_angle', 8.)
 
-		self.steer_pub = rospy.Publisher('/vehicle/steering_cmd',SteeringCmd, queue_size=1)
-		self.throttle_pub = rospy.Publisher('/vehicle/throttle_cmd',ThrottleCmd, queue_size=1)
-		self.brake_pub = rospy.Publisher('/vehicle/brake_cmd',BrakeCmd, queue_size=1)
+        self.steer_pub = rospy.Publisher('/vehicle/steering_cmd',
+                                         SteeringCmd, queue_size=1)
+        self.throttle_pub = rospy.Publisher('/vehicle/throttle_cmd',
+                                            ThrottleCmd, queue_size=1)
+        self.brake_pub = rospy.Publisher('/vehicle/brake_cmd',
+                                         BrakeCmd, queue_size=1)
 
-		# TODO: Create `TwistController` object
-		# self.controller = TwistController(<Arguments you wish to provide>)
+        min_speed = .5
 
-		# TODO: Subscribe to all the topics you need to
-		rospy.Subscriber('/final_waypoints', Lane, self.waypoints_cb)
-		rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-		self.current_velocity = None
-		rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb,queue_size=1)
-		self.twist = None
-		rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cb)
+        # TODO: Create `TwistController` object
+        # self.controller = TwistController(<Arguments you wish to provide>)
 
-		self.pose = None
-		self.waypoints = None
+        # TODO: Subscribe to all the topics you need to
+        rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
+        self.current_velocity = None
+        rospy.Subscriber('/current_velocity', TwistStamped, self.current_velocity_cb,queue_size=1)
+        self.twist = None
+        rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cb)
 
-		self.controller = Controller()
-		self.yaw_controller = YawController(wheel_base, 8*steer_ratio, min_speed, max_lat_accel,max_steer_angle)
+        self.pose = None
+        self.waypoints = None
 
-		self.loop()
+        self.controller = Controller()
+        self.yaw_controller = YawController(wheel_base, steer_ratio, min_speed, max_lat_accel,max_steer_angle)
 
-	def pose_cb(self, msg):
-		self.pose = msg
+        self.loop()
 
-	def current_velocity_cb(self,msg):
-		self.current_velocity = msg.twist
+    def loop(self):
+        rate = rospy.Rate(50) # 50Hz
+        while not rospy.is_shutdown():
+            throttle, brake, steering = self.controller.control()
 
-		#self.current_linear_velocity = msg.twist.linear.x
-		#self.current_angular_velocity = msg.twist.angular.z
+            if self.twist is not None and self.current_velocity is not None:
+                #rospy.logerr('target velocity: %f'%(self.twist.linear.x))
+                steering = self.yaw_controller.get_steering(self.twist.linear.x, self.twist.angular.z, self.current_velocity.linear.x)
 
-	def twist_cb(self,msg):
-		self.twist = msg.twist
-		#self.linear_velocity = self.twist_cmd.twist.linear.x
-		#self.angular_velocity = self.twist_cmd.twist.angular.z
+            #rospy.logerr('%f,%f,%f'%(throttle, brake, steering))
 
-	def waypoints_cb(self, waypoints):
-		self.waypoints = waypoints
+            self.publish(throttle, brake, steering)
+            rate.sleep()
 
-	def loop(self):
+    def pose_cb(self, msg):
+        self.pose = msg
 
-		 #rate = rospy.Rate(50) # 50Hz
-		rate = rospy.Rate(50) 
-	   
-		while not rospy.is_shutdown():
-			# TODO: Get predicted throttle, brake, and steering using `twist_controller`
-			# You should only publish the control commands if dbw is enabled
-			# throttle, brake, steering = self.controller.control(<proposed linear velocity>,
-			#                                                     <proposed angular velocity>,
-			#                                                     <current linear velocity>,
-			#                                                     <dbw status>,
-			#                                                     <any other argument you need>)
-			# if <dbw is enabled>:
-			#   self.publish(throttle, brake, steer)
-			
-			throttle, brake, steering = self.controller.control()
+    def current_velocity_cb(self,msg):
+        self.current_velocity = msg.twist
 
-			if self.twist is not None and self.current_velocity is not None:
-				rospy.logerr('target velocity: %f'%(self.twist.linear.x))
-				steering = -1.0*self.yaw_controller.get_steering(self.twist.linear.x, self.twist.angular.z, self.current_velocity.linear.x)
+        #self.current_linear_velocity = msg.twist.linear.x
+        #self.current_angular_velocity = msg.twist.angular.z
 
-			rospy.logerr('%f,%f,%f'%(throttle, brake, steering))
+    def twist_cb(self,msg):
+        self.twist = msg.twist
+        #self.linear_velocity = self.twist_cmd.twist.linear.x
+        #self.angular_velocity = self.twist_cmd.twist.angular.z
+    def publish(self, throttle, brake, steer):
+        tcmd = ThrottleCmd()
+        tcmd.enable = True
+        tcmd.pedal_cmd_type = ThrottleCmd.CMD_PERCENT
+        tcmd.pedal_cmd = throttle
+        self.throttle_pub.publish(tcmd)
 
-			self.publish(throttle, brake, steering)
+        scmd = SteeringCmd()
+        scmd.enable = True
+        scmd.steering_wheel_angle_cmd = steer
+        self.steer_pub.publish(scmd)
 
-			rate.sleep()
-
-	def publish(self, throttle, brake, steer):
-		tcmd = ThrottleCmd()
-		tcmd.enable = True
-		tcmd.pedal_cmd_type = ThrottleCmd.CMD_PERCENT
-		tcmd.pedal_cmd = throttle
-		self.throttle_pub.publish(tcmd)
-
-		scmd = SteeringCmd()
-		scmd.enable = True
-		scmd.steering_wheel_angle_cmd = steer
-		self.steer_pub.publish(scmd)
-
-		bcmd = BrakeCmd()
-		bcmd.enable = True
-		bcmd.pedal_cmd_type = BrakeCmd.CMD_TORQUE
-		bcmd.pedal_cmd = brake
-		self.brake_pub.publish(bcmd)
+        bcmd = BrakeCmd()
+        bcmd.enable = True
+        bcmd.pedal_cmd_type = BrakeCmd.CMD_TORQUE
+        bcmd.pedal_cmd = brake
+        self.brake_pub.publish(bcmd)
 
 
 if __name__ == '__main__':
-	try:
-		DBWNode()
-	except Exception as e:
-		rospy.logerr(e)
-		rospy.logerr(traceback.format_exc())
-		print(e)
+    try:
+        DBWNode()
+    except Exception as e:
+        rospy.logerr("something failed in dbw_node")
+        rospy.logerr(traceback.format_exc())
