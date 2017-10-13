@@ -12,8 +12,20 @@ import cv2
 import yaml
 
 import traceback
+import numpy as np
+
+
+#common utility functions
+from os import sys, path
+sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
+import utils
+
+
 
 STATE_COUNT_THRESHOLD = 3
+
+CHEAT = True
+
 
 class TLDetector(object):
     def __init__(self):
@@ -51,6 +63,11 @@ class TLDetector(object):
         self.last_wp = -1
         self.state_count = 0
 
+        self.light_map =[]
+
+
+        self.pos = None #the car's position
+
         self.loop()
 
     def loop(self):
@@ -75,15 +92,45 @@ class TLDetector(object):
 
     def pose_cb(self, msg):
         self.pose = msg
-        #rospy.logerr('got pose!')
+        self.pos = utils.SimplePose(msg.pose)
 
     def waypoints_cb(self, waypoints):
         self.waypoints = waypoints
+        #self.waypoints = waypoints.waypoints
         rospy.logerr('got wp!')
 
     def traffic_cb(self, msg):
+        
+        if self.pos is None:
+            return 
+
+        #if len(self.lights) !=0:
+        #    return
+
+        if self.waypoints is None:
+            return
+
+
+
+        #map each light to its nearest waypoint
+        if len(self.lights) ==0:
+            rospy.logerr("----------------------------------SETTING LIGHT WAYPOINTS--------------------------------------")
+            rospy.logerr('>>>light msg len: %i %i'%(len(msg.lights), len(self.waypoints.waypoints)))
+
+            for k,light in enumerate(msg.lights):
+                #rospy.logerr('light msg len: %i %i'%(len(msg.lights), len(self.waypoints.waypoints)))
+                pos = utils.SimplePose(light.pose.pose)
+                i = utils.get_nearest_waypoint(pos,self.waypoints.waypoints,ignore_heading=True) #lights do not have a direction
+
+                rospy.logerr('light %i gets waypoint %i'%(k,i))
+                self.light_map.append(i)
+
+            rospy.logerr('-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~---> got lights! %i'%len(self.light_map))
+
+
         self.lights = msg.lights
-        #rospy.logerr('got lights!')
+
+
 
     def image_cb(self, msg):
         """Identifies red lights in the incoming camera image and publishes the index
@@ -93,10 +140,11 @@ class TLDetector(object):
             msg (Image): image from car-mounted camera
 
         """
+
         self.has_image = True
         self.camera_image = msg
-        #light_wp, state = self.process_traffic_lights()
-        light_wp,state = 300, TrafficLight.RED
+        light_wp, state = self.process_traffic_lights()
+
 
         '''
         Publish upcoming red lights at camera frequency.
@@ -115,19 +163,6 @@ class TLDetector(object):
         else:
             self.upcoming_red_light_pub.publish(Int32(self.last_wp))
         self.state_count += 1
-
-    def get_closest_waypoint(self, pose):
-        """Identifies the closest path waypoint to the given position
-            https://en.wikipedia.org/wiki/Closest_pair_of_points_problem
-        Args:
-            pose (Pose): position to match a waypoint to
-
-        Returns:
-            int: index of the closest waypoint in self.waypoints
-
-        """
-        #TODO implement
-        return 0
 
     def get_light_state(self, light):
         """Determines the current color of the traffic light
@@ -157,19 +192,38 @@ class TLDetector(object):
             int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
         """
+
+        #if CHEAT:
+        #    #get the data from 
+        #    return 3000, TrafficLight.RED
+
         light = None
+        light_wp = -1
 
         # List of positions that correspond to the line to stop in front of for a given intersection
-        stop_line_positions = self.config['stop_line_positions']
-        if(self.pose):
-            car_position = self.get_closest_waypoint(self.pose.pose)
+        #stop_line_positions = self.config['stop_line_positions']
+        #if(self.pos):
+            #car_position = utils.get_nearest_waypoint(self.pos,self.waypoints.waypoints)
 
         #TODO find the closest visible traffic light (if one exists)
+        if len(self.lights) >0:
+            i = utils.get_nearest_waypoint(self.pos,self.lights, ignore_heading=True) #lights do not have a direction
+            l = utils.SimplePose(self.lights[i].pose.pose)
+            #rospy.logerr('%i nearest light: %i, %s, car; %s'%(len(self.lights),i, l, self.pos))
+            #rospy.logerr(len(self.light_map))
+            #rospy.logerr(len(self.lights))
+        
+            #light = self.lights[i]
+            #light_wp = self.light_map[i]
+            #rospy.logerr(TrafficLight.RED)
+            #rospy.logerr(self.lights[i].state)
+            return self.light_map[i], self.lights[i].state
+
 
         if light:
             state = self.get_light_state(light)
             return light_wp, state
-        self.waypoints = None
+        #self.waypoints = None
         return -1, TrafficLight.UNKNOWN
 
 if __name__ == '__main__':

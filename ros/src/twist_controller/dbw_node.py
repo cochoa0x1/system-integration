@@ -13,6 +13,13 @@ from twist_controller import Controller
 from yaw_controller import YawController
 
 
+from pid import PID
+
+#common utility functions
+from os import sys, path
+sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
+import utils
+
 '''
 You can build this node only after you have built (or partially built) the `waypoint_updater` node.
 
@@ -70,12 +77,12 @@ class DBWNode(object):
         self.twist = None
         rospy.Subscriber('/twist_cmd', TwistStamped, self.twist_cb)
 
-        self.pose = None
-        self.waypoints = None
-
+        self.pos = None
+        
         self.controller = Controller()
         self.yaw_controller = YawController(wheel_base, steer_ratio, min_speed, max_lat_accel,max_steer_angle)
 
+        self.pid = PID(2.0, 0.4, 0.1,-1,1)
         self.loop()
 
     def loop(self):
@@ -86,21 +93,29 @@ class DBWNode(object):
 
             if self.twist is not None and self.current_velocity is not None:
                 #rospy.logerr('target velocity: %f'%(self.twist.linear.x))
-                rospy.logerr('target vel %f'%self.twist.linear.x)
-                if self.twist.linear.x > self.current_velocity.linear.x:
-                    throttle = 1.0
-                else:
-                    throttle = 0.0
-                    brake = 1000
+                #rospy.logerr('target vel %f'%self.twist.linear.x)
+                #if self.twist.linear.x > self.current_velocity.linear.x:
+                #    throttle = 1.0
+                #else:
+                #    throttle = 0.0
+                #   #brake = 1000
+
+                error = self.twist.linear.x - self.current_velocity.linear.x
+                throttle = self.pid.step(error, 1.0/50)
+
+                if throttle < 0:
+                    brake = -1000*throttle - 100
+                    throttle =0.0
+
                 steering = self.yaw_controller.get_steering(self.twist.linear.x, self.twist.angular.z, self.current_velocity.linear.x)
 
-            #rospy.logerr('%f,%f,%f'%(throttle, brake, steering))
+                #rospy.logerr('%f,%f,%f'%(throttle, brake, steering))
 
             self.publish(throttle, brake, steering)
             rate.sleep()
 
     def pose_cb(self, msg):
-        self.pose = msg
+        self.pos = utils.SimplePose(msg.pose)
 
     def current_velocity_cb(self,msg):
         self.current_velocity = msg.twist
@@ -112,6 +127,7 @@ class DBWNode(object):
         self.twist = msg.twist
         #self.linear_velocity = self.twist_cmd.twist.linear.x
         #self.angular_velocity = self.twist_cmd.twist.angular.z
+
     def publish(self, throttle, brake, steer):
         tcmd = ThrottleCmd()
         tcmd.enable = True
