@@ -85,9 +85,10 @@ class WaypointUpdater(object):
                 z = k+i
 
                 #slow down when within 20 of the light 
-                if self.light_i - z < 40 and self.light_i >= z:
-                    rospy.logerr('APPROACHING RED LIGHT STOPPPPPPPP (z %i,lighti %i)'%(z,self.light_i))
-                    w.twist.twist.linear.x = 0
+                if self.light_i - z < 30 and self.light_i >= z:
+                    #rospy.logerr('APPROACHING RED LIGHT STOPPPPPPPP (z %i,lighti %i)'%(z,self.light_i))
+                    #w.twist.twist.linear.x = 0
+                    w.twist.twist.linear.x = TARGET_VEL
                 else:
                     w.twist.twist.linear.x = TARGET_VEL
 

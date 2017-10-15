@@ -82,7 +82,7 @@ class DBWNode(object):
         self.controller = Controller()
         self.yaw_controller = YawController(wheel_base, steer_ratio, min_speed, max_lat_accel,max_steer_angle)
 
-        self.pid = PID(2.0, 0.4, 0.1,-1,1)
+        self.pid = PID(2.0, 0.4, 0.1,-1,1.0)
         self.loop()
 
     def loop(self):
@@ -92,7 +92,7 @@ class DBWNode(object):
 
 
             if self.twist is not None and self.current_velocity is not None:
-                #rospy.logerr('target velocity: %f'%(self.twist.linear.x))
+                rospy.logerr('target velocity: %f'%(self.twist.linear.x))
                 #rospy.logerr('target vel %f'%self.twist.linear.x)
                 #if self.twist.linear.x > self.current_velocity.linear.x:
                 #    throttle = 1.0
@@ -104,12 +104,12 @@ class DBWNode(object):
                 throttle = self.pid.step(error, 1.0/50)
 
                 if throttle < 0:
-                    brake = -1000*throttle - 100
+                    brake = -1000*throttle + 100
                     throttle =0.0
 
                 steering = self.yaw_controller.get_steering(self.twist.linear.x, self.twist.angular.z, self.current_velocity.linear.x)
 
-                #rospy.logerr('%f,%f,%f'%(throttle, brake, steering))
+                rospy.logerr('%f,%f,%f'%(throttle, brake, steering))
 
             self.publish(throttle, brake, steering)
             rate.sleep()

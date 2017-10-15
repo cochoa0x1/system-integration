@@ -1,24 +1,36 @@
 from styx_msgs.msg import TrafficLight
-import matplotlib.pyplot as plt
+#import matplotlib
+#matplotlib.use('Agg')
+
+#import matplotlib.pyplot as plt
+#import numpy as np
+
+#import cv2
+#import tensorflow as tf
 
 class TLClassifier(object):
-    def __init__(self):
-        #TODO load classifier
-        
-        fig = plt.figure()
-        data = np.zeros((nx, ny))
-        self.im = plt.imshow(data, cmap='gist_gray_r', vmin=0, vmax=1)
-        plt.show()
+	def __init__(self):
+		#TODO load classifier
+		pass
+		
+		
 
-    def get_classification(self, image):
-        """Determines the color of the traffic light in the image
+	def get_classification(self, image):
+		"""Determines the color of the traffic light in the image
 
-        Args:
-            image (cv::Mat): image containing the traffic light
+		Args:
+			image (cv::Mat): image containing the traffic light
 
-        Returns:
-            int: ID of traffic light color (specified in styx_msgs/TrafficLight)
+		Returns:
+			int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
-        """
-        #TODO implement light color prediction
-        return TrafficLight.UNKNOWN
+		"""
+		#TODO implement light color prediction
+		#plt.plot(np.random.randn(1000).cumsum())
+		#plt.imshow(image)
+		#plt.savefig('test.png')
+		#plt.clf()
+
+		#cv2.imwrite('test.png',image) #works!
+
+		return TrafficLight.UNKNOWN
