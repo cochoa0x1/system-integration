@@ -37,7 +37,7 @@ class TLDetector(object):
 		self.lights = []
 
 		sub1 = rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-		sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+		self.sub2 = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
 
 		'''
 		/vehicle/traffic_lights provides you with the location of the traffic light in 3D map space and
@@ -96,6 +96,7 @@ class TLDetector(object):
 		self.waypoints = waypoints
 		#self.waypoints = waypoints.waypoints
 		rospy.logerr('got wp!')
+		self.sub2.unregister()
 
 	def traffic_cb(self, msg):
 		

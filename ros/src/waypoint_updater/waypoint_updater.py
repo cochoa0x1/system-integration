@@ -41,7 +41,7 @@ class WaypointUpdater(object):
         utils.test_utils('HELLOOOOOOOOOOFDDDDD--------------------------------')
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+        self.base_wp_sub = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
         rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
 
         # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
@@ -55,7 +55,7 @@ class WaypointUpdater(object):
         self.loop()
 
     def loop(self):
-        rate = rospy.Rate(50)
+        rate = rospy.Rate(10)
 
         while not rospy.is_shutdown():
 
@@ -85,10 +85,10 @@ class WaypointUpdater(object):
                 z = k+i
 
                 #slow down when within 20 of the light 
-                if self.light_i - z < 30 and self.light_i >= z:
+                if self.light_i - z < 40 and self.light_i >= z:
                     #rospy.logerr('APPROACHING RED LIGHT STOPPPPPPPP (z %i,lighti %i)'%(z,self.light_i))
-                    #w.twist.twist.linear.x = 0
-                    w.twist.twist.linear.x = TARGET_VEL
+                    w.twist.twist.linear.x = 0
+                    #w.twist.twist.linear.x = TARGET_VEL
                 else:
                     w.twist.twist.linear.x = TARGET_VEL
 
@@ -101,6 +101,8 @@ class WaypointUpdater(object):
 
     def waypoints_cb(self, waypoints):
         self.waypoints = waypoints.waypoints
+
+        self.base_wp_sub.unregister()
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement

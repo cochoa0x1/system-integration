@@ -9,11 +9,13 @@ from flask import Flask, render_template
 from bridge import Bridge
 from conf import conf
 
+
 #eventlet.monkey_patch()
 
 sio = socketio.Server()
 #sio = socketio.Server(async_mode='eventlet')
 app = Flask(__name__)
+bridge = Bridge(conf)
 msgs = []
 
 dbw_enable = False
@@ -27,7 +29,8 @@ def send(topic, data):
     msgs.append((topic, data))
     #sio.emit(topic, data=json.dumps(data), skip_sid=True)
 
-bridge = Bridge(conf, send)
+#bridge=Bridge(conf,send)
+bridge.register_server(send)
 
 @sio.on('telemetry')
 def telemetry(sid, data):
@@ -63,6 +66,7 @@ def image(sid, data):
 if __name__ == '__main__':
 
     # wrap Flask application with engineio's middleware
+    
     app = socketio.Middleware(sio, app)
 
     # deploy as an eventlet WSGI server
