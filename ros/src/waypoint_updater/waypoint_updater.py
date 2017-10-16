@@ -2,8 +2,6 @@
 from __future__ import print_function
 import traceback
 
-from __future__ import print_function
-
 import rospy
 from geometry_msgs.msg import PoseStamped
 from styx_msgs.msg import Lane, Waypoint
@@ -80,17 +78,15 @@ class WaypointUpdater(object):
 
             new_wapoints.waypoints = self.waypoints[i:cutoff]
 
+            #if we have a red light ahead of us, slow down
+            if self.light_i - i < 75 and self.light_i >= i:
+                rospy.logerr('RED LIGHT AHEAD! SLAMM THE BRAKES DUDE!')
+                TARGET_VEL = 0
+
+
             #set the speed for these waypoints
             for k,w in enumerate(new_wapoints.waypoints):
-                z = k+i
-
-                #slow down when within 50 of the light 
-                if self.light_i - z < 50 and self.light_i >= z:
-                    #rospy.logerr('APPROACHING RED LIGHT STOPPPPPPPP (z %i,lighti %i)'%(z,self.light_i))
-                    w.twist.twist.linear.x = 0
-                    #w.twist.twist.linear.x = TARGET_VEL
-                else:
-                    w.twist.twist.linear.x = TARGET_VEL
+                w.twist.twist.linear.x = TARGET_VEL
 
             self.final_waypoints_pub.publish(new_wapoints)
 

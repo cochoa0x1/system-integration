@@ -1,4 +1,30 @@
+# System Integration Project
+### Udacity Self Driving Car Term 3
+
 This is the project repo for the final project of the Udacity Self-Driving Car Nanodegree: Programming a Real Self-Driving Car. For more information about the project, see the project introduction [here](https://classroom.udacity.com/nanodegrees/nd013/parts/6047fe34-d93c-4f50-8336-b70ef10cb4b2/modules/e1a23b06-329a-4684-a717-ad476f0d8dff/lessons/462c933d-9f24-42d3-8bdc-a08a5fc866e4/concepts/5ab4b122-83e6-436d-850f-9f4d26627fd9).
+
+### Overview
+
+The goal of this project was to integrate the various systems and modules of a self driving car so as to successfully pilot a car in a simulator and then a real car (CARLA). The car should be able to plot its own course, and identify and respond to traffic lights.
+
+![](images/final-project-ros-graph-v2.png)
+
+The primary modules are:
+
+### 1. Waypoint Planning
+
+This module charts the desired course for the car and the desired speed. This module is responsible for integrating the information about traffic lights and car state and map to determine the best course. In this project it was fairly simple: if a red light is ahead, slow down. Otherwise the path was that of the road itself.
+
+### 2. Control
+
+This module was responsible for controlling the car along the desired course. A PID controller was used for the speed while the steering controls were handled by a yaw controller fed by pure_pursuit.cpp.
+
+### 3. Vision (Traffic light sensing and classification)
+
+The traffic light module: ros/src/tl_detector idenitifes traffic lights in a camera feed and classifies them as Red, Yellow, or Green. This was accomplished by using a state of the art SSD trained by google and a simple opencv color thresholding script. Due to tensorflow version conflicts, resnet was used on the final version instead of the faster SSD mobilenet. On modest hardware this led to some interesting problems caused by the lag, optimizations are needed.
+
+![](images/greenlight.png)
+
 
 ### Native Installation
 

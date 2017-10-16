@@ -182,8 +182,8 @@ class TLDetector(object):
 			l = utils.SimplePose(self.lights[i].pose.pose)
 			#rospy.logerr('%i nearest light: %i, %s, car; %s'%(len(self.lights),i, l, self.pos))
 
-			#state = self.get_light_state(self.lights[i])
-			state = self.lights[i].state #cheat because classifier is CPU run and is too slow
+			state = self.get_light_state(self.lights[i])
+			#state = self.lights[i].state #cheat because classifier is CPU run and is too slow
 
 			return self.light_map[i], state
 

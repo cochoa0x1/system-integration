@@ -151,20 +151,23 @@ def classify_sub(sub):
 	#print(light_color)
 	light_states={0:'GREEN',1:'YELLOW',2:'RED'}
 	
-	if np.max(light_color) < 25:
-		return 'UNKNOWN'
+	if np.max(light_color) < 5:
+		return 'RED'
 	
 	return light_states[np.argmax(light_color)]
 
 def classify_all(im,sess):
 	'''do everything'''
 	boxes, scores, classes = detect(im,sess)
-	boxes, scores, classes = filter_boxes(.75, boxes, scores, classes)
+	boxes, scores, classes = filter_boxes(.85, boxes, scores, classes)
 	h, w, _ = im.shape
 	box_coords = to_image_coords(boxes, h, w)
 	subs = sub_images(im, box_coords)
 	
+	#plt.clf()
 	#plt.imshow(draw_boxes(im,box_coords))
+	#plt.show()
+
 	return [classify_sub(sub) for sub in subs]
 
 
@@ -186,6 +189,7 @@ class TLClassifier(object):
 		try:
 			lights = classify_all(image,sess)
 			log(json.dumps(lights))
+
 			for l in lights:
 				if l in  ['RED']: #treat yellow lights are red to be on the safe side
 					return TrafficLight.RED
