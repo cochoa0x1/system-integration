@@ -12,9 +12,21 @@ import traceback
 
 import json
 
+#SSD fails beccause of tensorflow version on CARLA
 #SSD_GRAPH_FILE = 'light_classification/ssd_mobilenet_v1_coco_11_06_2017/frozen_inference_graph.pb'
 SSD_GRAPH_FILE = 'light_classification/faster_rcnn_resnet101_coco_11_06_2017/frozen_inference_graph.pb'
 
+
+#https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/detection_model_zoo.md
+
+def log(s):
+	with open('logfile.txt','a') as f:
+		f.write(s+'\n')
+
+with open('logfile.txt','wb') as f:
+	f.write('new log \n')
+
+log('tf version: %s'%str(tf.__version__) )
 
 def load_graph(graph_file):
 	"""Loads a frozen inference graph"""
@@ -28,63 +40,132 @@ def load_graph(graph_file):
 	return graph
 
 
-def log(s):
-	with open('logfile.txt','a') as f:
-		f.write(s)
+detection_graph = load_graph(SSD_GRAPH_FILE)
+image_tensor = detection_graph.get_tensor_by_name('image_tensor:0')
+detection_boxes = detection_graph.get_tensor_by_name('detection_boxes:0')
+detection_scores = detection_graph.get_tensor_by_name('detection_scores:0')
+detection_classes = detection_graph.get_tensor_by_name('detection_classes:0')
 
 
-try:
-	detection_graph = load_graph(SSD_GRAPH_FILE)
-	with open('logfile.txt','wb') as f:
-		f.write('LOADED GRAPH! <--------------------------------------------\n')
+sess = tf.Session(graph=detection_graph)
 
+log('session open')
 
-	detection_graph = load_graph(SSD_GRAPH_FILE)
-	# detection_graph = load_graph(RFCN_GRAPH_FILE)
-	# detection_graph = load_graph(FASTER_RCNN_GRAPH_FILE)
-
-	# The input placeholder for the image.
-	# `get_tensor_by_name` returns the Tensor with the associated name in the Graph.
-	image_tensor = detection_graph.get_tensor_by_name('image_tensor:0')
-
-	# Each box represents a part of the image where a particular object was detected.
-	detection_boxes = detection_graph.get_tensor_by_name('detection_boxes:0')
-
-	# Each score represent how level of confidence for each of the objects.
-	# Score is shown on the result image, together with the class label.
-	detection_scores = detection_graph.get_tensor_by_name('detection_scores:0')
-
-	# The classification of the object (integer id).
-	detection_classes = detection_graph.get_tensor_by_name('detection_classes:0')
-
-	log('loaded all the other stuff')
-
-
-except Exception as e:
-	with open('logfile.txt','wb') as f:
-		f.write('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n')
-		f.write(traceback.format_exc())
-
-
-log('tf version:')
-log(str(tf.__version__))
-
-def detect(image):
-
-	log(str(type(image)))
-
+def detect(image, sess):
 	image_np = np.expand_dims(np.asarray(image, dtype=np.uint8), 0)
-	with tf.Session(graph=detection_graph) as sess:                
-		# Actual detection.
-		(boxes, scores, classes) = sess.run([detection_boxes, detection_scores, detection_classes], feed_dict={image_tensor: image_np})
+	(boxes, scores, classes) = sess.run([detection_boxes, detection_scores, detection_classes], feed_dict={image_tensor: image_np})
+	
+	boxes = np.squeeze(boxes)
+	scores = np.squeeze(scores)
+	classes = np.squeeze(classes)
+	
+	return boxes, scores, classes
 
-	#boxes = np.squeeze(boxes)
-	#scores = np.squeeze(scores)
-	#classes = np.squeeze(classes)
+def filter_boxes(min_score, boxes, scores, classes):
+	"""Return boxes with a confidence >= `min_score`"""
+	n = len(classes)
+	idxs = []
+	for i in range(n):
+		if scores[i] >= min_score and classes[i]==10:
+			idxs.append(i)
+	
+	filtered_boxes = boxes[idxs, ...]
+	filtered_scores = scores[idxs, ...]
+	filtered_classes = classes[idxs, ...]
+	return filtered_boxes, filtered_scores, filtered_classes
 
-	log(json.dumps(boxes))
-	log(json.dumps(scores))
-	log(json.dumps(classes))
+def to_image_coords(boxes, height, width):
+	"""
+	The original box coordinate output is normalized, i.e [0, 1].
+	
+	This converts it back to the original coordinate based on the image
+	size.
+	"""
+	box_coords = np.zeros_like(boxes)
+	box_coords[:, 0] = boxes[:, 0] * height
+	box_coords[:, 1] = boxes[:, 1] * width
+	box_coords[:, 2] = boxes[:, 2] * height
+	box_coords[:, 3] = boxes[:, 3] * width
+	
+	return box_coords
+
+def draw_boxes(img, bboxes, color=(0, 0, 255), thick=3):
+	'''draws bounding boxes'''
+	# Make a copy of the image
+	imcopy = np.copy(img)
+	# Iterate through the bounding boxes
+	for bbox in bboxes:
+		# Draw a rectangle given bbox coordinates
+		cv2.rectangle(imcopy, (bbox[1], bbox[0]),(bbox[3], bbox[2]), color, thick)
+	# Return the image copy with boxes drawn
+	return imcopy
+
+def sub_images(im,box_coords):
+	'''grab a rectangular area from a larger image'''
+	images=[]
+	for b in box_coords:
+		x,y,w,h = int(np.round(b[1])),int(np.round(b[0])),int(np.round(b[3]-b[1])),int(np.round(b[2]-b[0]))
+		images.append(im[y:y+h, x:x+w])
+	return images
+
+def classify_sub(sub):
+	'''classify an image that contains ONLY a traffic light (we assume)
+	simple R,G, and yellow-ish thresholding at the assumed positions: Green at the bottom, red at the top
+	'''
+	h,w, _ = sub.shape
+	h3 = int(h/3)
+	light_color=[]
+
+	#maybe green? check the lower third of the image's green channel
+	i=0
+	a= h-i*h3
+	b = h-(i+1)*h3
+	ret,thresh = cv2.threshold(sub[b:a,:,1],190,255,cv2.THRESH_BINARY)
+	#plt.imshow(thresh,cmap='gray')
+
+	light_color.append(thresh.mean())
+
+	#maybe yellow? check the middle
+	#plt.figure()
+
+	i=1
+	a= h-i*h3
+	b = h-(i+1)*h3
+	lower = np.uint8([180, 180,   0])
+	upper = np.uint8([255, 255, 255])
+	thresh = cv2.inRange(sub[b:a,:,:], lower, upper)
+	#plt.imshow(thresh,cmap='gray')
+
+	light_color.append(thresh.mean())
+
+	#maybe red? check the top part of the image for red
+	#plt.figure()
+	i=2
+	a= h-i*h3
+	b = h-(i+1)*h3
+	ret,thresh = cv2.threshold(sub[b:a,:,0],127,255,cv2.THRESH_BINARY)
+	#plt.imshow(thresh,cmap='gray')
+
+	light_color.append(thresh.mean())
+
+	#print(light_color)
+	light_states={0:'GREEN',1:'YELLOW',2:'RED'}
+	
+	if np.max(light_color) < 25:
+		return 'UNKNOWN'
+	
+	return light_states[np.argmax(light_color)]
+
+def classify_all(im,sess):
+	'''do everything'''
+	boxes, scores, classes = detect(im,sess)
+	boxes, scores, classes = filter_boxes(.75, boxes, scores, classes)
+	h, w, _ = im.shape
+	box_coords = to_image_coords(boxes, h, w)
+	subs = sub_images(im, box_coords)
+	
+	#plt.imshow(draw_boxes(im,box_coords))
+	return [classify_sub(sub) for sub in subs]
 
 
 class TLClassifier(object):
@@ -101,10 +182,13 @@ class TLClassifier(object):
 			int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
 		"""
-		#TODO implement light color prediction
 		#cv2.imwrite('test.png',image) #works!
 		try:
-			detect(image)
+			lights = classify_all(image,sess)
+			log(json.dumps(lights))
+			for l in lights:
+				if l in  ['RED']: #treat yellow lights are red to be on the safe side
+					return TrafficLight.RED
 		except Exception as e:
 			log(traceback.format_exc())
 

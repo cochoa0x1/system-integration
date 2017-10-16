@@ -24,14 +24,12 @@ import utils
 
 STATE_COUNT_THRESHOLD = 3
 
-CHEAT = True
 
 
 class TLDetector(object):
 	def __init__(self):
 		rospy.init_node('tl_detector')
 
-		self.pose = None
 		self.waypoints = None
 		self.camera_image = None
 		self.lights = []
@@ -66,30 +64,10 @@ class TLDetector(object):
 		self.light_map =[]
 		self.pos = None #the car's position
 
-		self.loop()
+		rospy.spin()
 
-	def loop(self):
-		rate = rospy.Rate(1)
-
-
-		#for now get the nearest waypoint that is in front of the car
-		#need pose, lights, and waypoints here
-
-		#publish its index to /traffic_waypoints
-
-		while not rospy.is_shutdown():
-			# if self.pose is None or self.lights is None or self.waypoints is None:
-			#     rospy.logerr('lights not setup')
-			#     rate.sleep()
-			#     continue
-
-			#just publish 300
-			#self.upcoming_red_light_pub.publish(Int32(300))
-
-			rate.sleep()
 
 	def pose_cb(self, msg):
-		self.pose = msg
 		self.pos = utils.SimplePose(msg.pose)
 
 	def waypoints_cb(self, waypoints):
@@ -110,21 +88,20 @@ class TLDetector(object):
 			return
 
 
-
 		#map each light to its nearest waypoint
 		if len(self.lights) ==0:
-			rospy.logerr("----------------------------------SETTING LIGHT WAYPOINTS--------------------------------------")
-			rospy.logerr('>>>light msg len: %i %i'%(len(msg.lights), len(self.waypoints.waypoints)))
+			#rospy.logerr("----------------------------------SETTING LIGHT WAYPOINTS--------------------------------------")
+			#rospy.logerr('>>>light msg len: %i %i'%(len(msg.lights), len(self.waypoints.waypoints)))
 
 			for k,light in enumerate(msg.lights):
 				#rospy.logerr('light msg len: %i %i'%(len(msg.lights), len(self.waypoints.waypoints)))
 				pos = utils.SimplePose(light.pose.pose)
 				i = utils.get_nearest_waypoint(pos,self.waypoints.waypoints,ignore_heading=True) #lights do not have a direction
 
-				rospy.logerr('light %i gets waypoint %i'%(k,i))
+				#rospy.logerr('light %i gets waypoint %i'%(k,i))
 				self.light_map.append(i)
 
-			rospy.logerr('-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~---> got lights! %i'%len(self.light_map))
+			#rospy.logerr('-~~~~~~~~~~~~~~~~~~~~~~~~~~~~~---> got lights! %i'%len(self.light_map))
 
 
 		self.lights = msg.lights
@@ -191,11 +168,6 @@ class TLDetector(object):
 			int: ID of traffic light color (specified in styx_msgs/TrafficLight)
 
 		"""
-
-		#if CHEAT:
-		#    #get the data from 
-		#    return 3000, TrafficLight.RED
-
 		light = None
 		light_wp = -1
 
@@ -209,16 +181,11 @@ class TLDetector(object):
 			i = utils.get_nearest_waypoint(self.pos,self.lights, ignore_heading=True) #lights do not have a direction
 			l = utils.SimplePose(self.lights[i].pose.pose)
 			#rospy.logerr('%i nearest light: %i, %s, car; %s'%(len(self.lights),i, l, self.pos))
-			#rospy.logerr(len(self.light_map))
-			#rospy.logerr(len(self.lights))
-		
-			#light = self.lights[i]
-			#light_wp = self.light_map[i]
-			#rospy.logerr(TrafficLight.RED)
-			#rospy.logerr(self.lights[i].state)
 
-			state = self.get_light_state(self.lights[i])
-			return self.light_map[i], self.lights[i].state
+			#state = self.get_light_state(self.lights[i])
+			state = self.lights[i].state #cheat because classifier is CPU run and is too slow
+
+			return self.light_map[i], state
 
 
 		if light:

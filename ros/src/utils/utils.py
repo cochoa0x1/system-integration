@@ -10,12 +10,6 @@ from styx_msgs.msg import Lane, Waypoint
 from std_msgs.msg import Int32
 import tf
 
-
-
-def test_utils(msg):
-    rospy.logerr(msg)
-
-
 class SimplePose():
     '''Just work with x,y,z, theta'''
     def __init__(self, pose=PoseStamped()):
