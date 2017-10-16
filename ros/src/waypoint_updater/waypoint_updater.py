@@ -7,10 +7,18 @@ from __future__ import print_function
 import rospy
 from geometry_msgs.msg import PoseStamped
 from styx_msgs.msg import Lane, Waypoint
+from std_msgs.msg import Int32
 
 import math
 import numpy as np
 import tf
+
+#common utility functions
+from os import sys, path
+sys.path.append(path.dirname(path.dirname(path.abspath(__file__))))
+import utils
+
+
 '''
 This node will publish waypoints from the car's current position to some `x` distance ahead.
 
@@ -26,30 +34,23 @@ as well as to verify your TL classifier.
 TODO (for Yousuf and Aaron): Stopline location for each traffic light.
 '''
 
-LOOKAHEAD_WPS = 50 # Number of waypoints we will publish. You can change this number
-
+LOOKAHEAD_WPS = 100 # Number of waypoints we will publish. You can change this number
 
 class WaypointUpdater(object):
     def __init__(self):
         rospy.init_node('waypoint_updater')
 
         rospy.Subscriber('/current_pose', PoseStamped, self.pose_cb)
-        rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+        self.base_wp_sub = rospy.Subscriber('/base_waypoints', Lane, self.waypoints_cb)
+        rospy.Subscriber('/traffic_waypoint', Int32, self.traffic_cb)
 
         # TODO: Add a subscriber for /traffic_waypoint and /obstacle_waypoint below
-        #rospy.Subscriber("/traffic_waypoint", Waypoint, self.traffic_cb)
-        #rospy.Subscriber("/obstacle_waypoint", Waypoint, self.obstacle_cb)
+        self.final_waypoints_pub = rospy.Publisher('final_waypoints', Lane, queue_size=1)
 
+        self.waypoints = None
+        self.pos = None
 
-        self.final_waypoints_pub = rospy.Publisher('/final_waypoints', Lane, queue_size=1)
-
-        # TODO: Add other member variables you need below
-        self.pose = PoseStamped()
-        self.waypoints = Lane()
-        self.x = None
-        self.y = None
-        self.z = None
-        self.theta = None
+        self.light_i = None
 
         self.loop()
 
@@ -58,71 +59,54 @@ class WaypointUpdater(object):
 
         while not rospy.is_shutdown():
 
-            if self.x is None or self.waypoints.waypoints is None:
+            if self.pos is None or self.waypoints is None:
                 rospy.logerr('waiting for init')
                 rate.sleep()
                 continue
 
-            rospy.logerr('position: %f, %f, %f'%(self.x, self.y, self.theta))
 
-            i = self.get_nearest_waypoint()
+            
+            i = utils.get_nearest_waypoint(self.pos,self.waypoints)
+            if self.light_i is None:
+                self.light_i = -1
+            rospy.logerr('%s next wp: %i ,next light: %i'%(self.pos,i, self.light_i))
+            
             new_wapoints = Lane()
-            new_wapoints.waypoints = self.waypoints.waypoints[i:i+LOOKAHEAD_WPS]
+
+
+            cutoff = i+LOOKAHEAD_WPS
+
+            TARGET_VEL = 10*.4457
+
+            new_wapoints.waypoints = self.waypoints[i:cutoff]
+
+            #set the speed for these waypoints
+            for k,w in enumerate(new_wapoints.waypoints):
+                z = k+i
+
+                #slow down when within 50 of the light 
+                if self.light_i - z < 50 and self.light_i >= z:
+                    #rospy.logerr('APPROACHING RED LIGHT STOPPPPPPPP (z %i,lighti %i)'%(z,self.light_i))
+                    w.twist.twist.linear.x = 0
+                    #w.twist.twist.linear.x = TARGET_VEL
+                else:
+                    w.twist.twist.linear.x = TARGET_VEL
+
             self.final_waypoints_pub.publish(new_wapoints)
 
             rate.sleep()
 
     def pose_cb(self, msg):
-        self.pose = msg
-        self.x = msg.pose.position.x
-        self.y = msg.pose.position.y
-        self.z = msg.pose.position.z
+        self.pos = utils.SimplePose(msg.pose)
 
-        euler = tf.transformations.euler_from_quaternion([
-            msg.pose.orientation.x,
-            msg.pose.orientation.y,
-            msg.pose.orientation.z,
-            msg.pose.orientation.w])
-        self.theta = euler[2]
-
-        rospy.logerr('position: %f, %f'%(self.pose.pose.position.x, self.pose.pose.position.y))
-
-        self.update_waypoints()
-       
-        #rospy.logerr(self.pose)
-        
     def waypoints_cb(self, waypoints):
-        self.waypoints = waypoints
+        self.waypoints = waypoints.waypoints
 
-    def get_nearest_waypoint(self):
-        '''returns the nearest waypoint index'''
-
-        d = lambda b: np.sqrt((self.x-b.x)**2 + (self.y-b.y)**2  + (self.z-b.z)**2)
-        
-        min_dist = 1e12
-        min_index = 0
-        min_angle = 0
-
-        for i, w in enumerate(self.waypoints.waypoints):
-
-            pos = w.pose.pose.position
-            dist = d(pos)
-
-            heading = np.arctan2( self.y-pos.y, self.x - pos.x)
-
-            theta = np.abs(heading - self.theta)
-            
-            if dist < min_dist and theta <= np.pi/4:
-                min_dist = dist
-                min_index = i
-                min_angle = theta
-
-        rospy.logerr('wp: %i, distance %f car_theta %f angle %f'%(min_index,min_dist,self.theta, min_angle))
-        return min_index
+        self.base_wp_sub.unregister()
 
     def traffic_cb(self, msg):
         # TODO: Callback for /traffic_waypoint message. Implement
-        pass
+        self.light_i = msg.data
 
     def obstacle_cb(self, msg):
         # TODO: Callback for /obstacle_waypoint message. We will implement it later
@@ -133,15 +117,6 @@ class WaypointUpdater(object):
 
     def set_waypoint_velocity(self, waypoints, waypoint, velocity):
         waypoints[waypoint].twist.twist.linear.x = velocity
-
-    def distance(self, waypoints, wp1, wp2):
-        dist = 0
-        dl = lambda a, b: math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2  + (a.z-b.z)**2)
-        for i in range(wp1, wp2+1):
-            dist += dl(waypoints[wp1].pose.pose.position, waypoints[i].pose.pose.position)
-            wp1 = i
-        return dist
-
 
 if __name__ == '__main__':
     try:
