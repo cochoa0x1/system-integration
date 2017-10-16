@@ -3,6 +3,13 @@
 
 cochoa0x1@gmail.com
 
+### NOTE, IMPORTANT OR WILL NOT RUN:
+
+1. download faster_rcnn_resnet101_coco_11_06_2017 from https://github.com/tensorflow/models/blob/master/research/object_detection/g3doc/detection_model_zoo.md
+2. untar and move frozen_inference_graph.pb -> ros/src/tl_detector/light_classification/faster_rcnn_resnet101_coco_11_06_2017/frozen_inference_graph.pb
+
+
+
 This is the project repo for the final project of the Udacity Self-Driving Car Nanodegree: Programming a Real Self-Driving Car. For more information about the project, see the project introduction [here](https://classroom.udacity.com/nanodegrees/nd013/parts/6047fe34-d93c-4f50-8336-b70ef10cb4b2/modules/e1a23b06-329a-4684-a717-ad476f0d8dff/lessons/462c933d-9f24-42d3-8bdc-a08a5fc866e4/concepts/5ab4b122-83e6-436d-850f-9f4d26627fd9).
 
 ### Overview
@@ -21,7 +28,7 @@ This module charts the desired course for the car and the desired speed. This mo
 
 This module was responsible for controlling the car along the desired course. A PID controller was used for the speed while the steering controls were handled by a yaw controller fed by pure_pursuit.cpp.
 
-### 3. Vision (Traffic light sensing and classification)
+### 3. Perception (Traffic light sensing and classification)
 
 The traffic light module: ros/src/tl_detector idenitifes traffic lights in a camera feed and classifies them as Red, Yellow, or Green. This was accomplished by using a state of the art SSD trained by google and a simple opencv color thresholding script. Due to tensorflow version conflicts, resnet was used on the final version instead of the faster SSD mobilenet. On modest hardware this led to some interesting problems caused by the lag, optimizations are needed.
 
